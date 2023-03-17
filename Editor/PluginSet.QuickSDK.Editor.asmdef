@@ -1,0 +1,19 @@
+{
+    "name": "PluginSet.QuickSDK.Editor",
+    "references": [
+        "PluginSet.Core.Editor",
+        "PluginSet.Core",
+        "PluginSet.QuickSDK"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
