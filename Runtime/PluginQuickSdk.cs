@@ -55,7 +55,7 @@ namespace PluginSet.QuickSDK
 
         protected override void Init(PluginSetConfig config)
         {
-            var data = config.Get<PluginQuickSdkConfig>("QuickSdk");
+            var data = config.Get<PluginQuickSdkConfig>();
             _productCode = data.ProductCode;
             _productKey = data.ProductKey;
             _initOnLaunch = data.InitOnLaunch;

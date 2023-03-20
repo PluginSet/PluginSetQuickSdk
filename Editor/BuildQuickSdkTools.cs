@@ -27,7 +27,7 @@ namespace PluginSet.QuickSDK.Editor
             
             context.AddLinkAssembly("PluginSet.QuickSDK");
             var pluginConfig = context.Get<PluginSetConfig>("pluginsConfig");
-            var config = pluginConfig.Get<PluginQuickSdkConfig>("QuickSdk");
+            var config = pluginConfig.AddConfig<PluginQuickSdkConfig>("QuickSdk");
             config.ProductCode = buildParams.ProductCode;
             config.ProductKey = buildParams.ProductKey;
             config.InitOnLaunch = buildParams.InitOnLaunch;

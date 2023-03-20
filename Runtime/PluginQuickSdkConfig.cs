@@ -4,7 +4,6 @@ using UnityEngine;
 
 namespace PluginSet.QuickSDK
 {
-    [PluginSetConfig("QuickSdk")]
     public class PluginQuickSdkConfig: ScriptableObject
     {
         public string ProductCode;
