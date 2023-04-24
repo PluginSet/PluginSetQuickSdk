@@ -1,7 +1,7 @@
 {
   "name": "com.pluginset.quicksdk",
   "displayName": "PluginSet QuickSDK",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "unity": "2018.4",
   "description": "QuickSDK",
   "keywords": [
@@ -9,7 +9,7 @@
     "quicksdk"
   ],
   "dependencies": {
-    "com.pluginset.core": "0.0.1"
+    "com.pluginset.core": "1.0.0"
   },
   "author": {
     "name": "LyneXiao",
