@@ -33,7 +33,7 @@ namespace PluginSet.QuickSDK.Editor
             config.InitOnLaunch = buildParams.InitOnLaunch;
         }
         
-        [AndroidProjectModify]
+        [AndroidProjectModify(int.MinValue)]
         public static void OnAndroidProjectModify(BuildProcessorContext context, AndroidProjectManager projectManager)
         {
             var buildParams = context.BuildChannels.Get<BuildQuickSdkParams>();
