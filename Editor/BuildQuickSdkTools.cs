@@ -26,11 +26,6 @@ namespace PluginSet.QuickSDK.Editor
                 context.Symbols.Add("ENABLE_QUICK_CHANNEL");
             
             context.AddLinkAssembly("PluginSet.QuickSDK");
-            var pluginConfig = context.Get<PluginSetConfig>("pluginsConfig");
-            var config = pluginConfig.AddConfig<PluginQuickSdkConfig>("QuickSdk");
-            config.ProductCode = buildParams.ProductCode;
-            config.ProductKey = buildParams.ProductKey;
-            config.InitOnLaunch = buildParams.InitOnLaunch;
         }
         
         [AndroidProjectModify(int.MinValue)]
@@ -40,19 +35,23 @@ namespace PluginSet.QuickSDK.Editor
             Debug.Log("Modify android project in QuickSdk check::: " + buildParams.Enable);
             if (!buildParams.Enable)
                 return;
+
+            var assetPath = Path.Combine(projectManager.LibraryPath, "src", "main", "assets");
+            var configFile = Path.Combine(assetPath, "quicksdk.xml");
+            File.WriteAllText(configFile, $"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<resources>\n  <string name=\"product_code\">{buildParams.ProductCode}</string>\n  <string name=\"product_key\">{buildParams.ProductKey}</string>\n</resources>");
             
             Debug.Log("Start Modify android project in QuickSdk!!!");
             
-            projectManager.SetApplication("com.pluginset.quicksdk.QuickSdkGameApplication");
+            projectManager.SetApplication("com.pluginset.quicksdk.PluginSetQuickApplication");
             projectManager.SetMainActivity("com.pluginset.quicksdk.SplashActivity");
-            projectManager.AddActivityPlugin("quicksdk", "com.pluginset.quicksdk.QuickSdkLifeCycle");
 
-            var element = projectManager.LibraryManifest.FindOrAddActivity("com.pluginset.core.PluginSetBaseActivity");
+            var element = projectManager.LibraryManifest.FindOrAddActivity("com.pluginset.quicksdk.PluginSetQuickActivity");
             element.SetAttribute("theme", AndroidConst.NS_URI, "@style/UnityThemeSelector");
             element.SetAttribute("launchMode", AndroidConst.NS_URI, "singleTask");
             element.SetAttribute("configChanges", AndroidConst.NS_URI, "mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale|layoutDirection|density");
             
             projectManager.LibraryManifest.SetMetaData("unityplayer.ForwardNativeEventsToDalvik", "true", "Set in QuickSdk");
+            projectManager.LibraryManifest.SetMetaData("unityplayer.UnityActivity", "true", "Set in QuickSdk");
 
             switch (PlayerSettings.defaultInterfaceOrientation)
             {
@@ -94,7 +93,7 @@ namespace PluginSet.QuickSDK.Editor
 
         private static void SetActivitiesOrientation(AndroidProjectManager projectManager, string orientation)
         {
-            var activity1 = projectManager.LibraryManifest.FindOrAddActivity("com.pluginset.core.PluginSetBaseActivity");
+            var activity1 = projectManager.LibraryManifest.FindOrAddActivity("com.pluginset.quicksdk.PluginSetQuickActivity");
             activity1.SetAttribute("screenOrientation", AndroidConst.NS_URI, orientation);
 
             var activity2 = projectManager.LibraryManifest.FindOrAddActivity("com.pluginset.quicksdk.SplashActivity");

@@ -15,7 +15,7 @@ namespace PluginSet.QuickSDK
 
         public int GetChannelId()
         {
-            return QuickSdkApi.GetChannelId();
+            return quicksdk.QuickSDK.getInstance().channelType();
         }
     }
 }

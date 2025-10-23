@@ -5,15 +5,22 @@ using System.Collections;
 using System.Collections.Generic;
 using PluginSet.Core;
 using PluginSet.Core.MiniJSON;
+using quicksdk;
 using UnityEngine;
 using Logger = PluginSet.Core.Logger;
+using Object = UnityEngine.Object;
 
 namespace PluginSet.QuickSDK
 {
 #if !UNITY_EDITOR
     [PluginRegister]
 #endif
-    public partial class PluginQuickSdk: PluginBase, IStartPlugin, ILoginPlugin, IPaymentPlugin, IUserSet, IExitPlugin, IRealNamePlugin, IAnalytics
+    public partial class PluginQuickSdk: PluginBase, IStartPlugin, ILoginPlugin
+        , IPaymentPlugin, IUserSet, IExitPlugin
+        // , IRealNamePlugin
+        // , IAnalytics
+        , IPrivacyAuthorizationCallback
+        , IQuickSDKListener
     {
         private static readonly Logger Logger = LoggerManager.GetLogger("QuickSdk");
         
@@ -35,107 +42,170 @@ namespace PluginSet.QuickSDK
 
         public bool IsEnablePayment => IsRunning;
 
-        public bool HasExitDialog => QuickSdkApi.HasExitDialog();
+        public bool HasExitDialog => quicksdk.QuickSDK.getInstance().isChannelHasExitDialog();
 
-        public bool IsEnableVerifyRealName => QuickSdkApi.SupportVerifyRealName();
+        public bool IsEnableVerifyRealName => quicksdk.QuickSDK.getInstance().isFunctionSupported(FuncType.QUICK_SDK_FUNC_TYPE_REAL_NAME_REGISTER);
 
-        private List<EventData> _unreportedEvents;
+        // private List<EventData> _unreportedEvents;
 
         private string _userLoginData = null;
 
-        private string _productCode;
-        private string _productKey;
-        private bool _initOnLaunch;
-
         private bool _inited = false;
+        
+        private Action<Result> _loginCallback;
+        private Action<Result> _logoutCallback;
+        private Action<Result> _paymentCallback;
 
-        private bool _initFailed;
-
-        private QuickSdkListener _quickSdkListener;
+        private QuickSDKListener _quickSdkListener;
+        private GameRoleInfo _gameRoleInfo;
 
         protected override void Init(PluginSetConfig config)
         {
-            var data = config.Get<PluginQuickSdkConfig>();
-            _productCode = data.ProductCode;
-            _productKey = data.ProductKey;
-            _initOnLaunch = data.InitOnLaunch;
-            
-            _quickSdkListener = new QuickSdkListener();
-            _quickSdkListener.OnExit += Application.Quit;
-            _quickSdkListener.OnSwitchUser += OnSwitchUserSuccess;
+            var obj = new GameObject("QuickSDKListener");
+            var mono = obj.AddComponent<MonoQuickSDKListener>();
+            mono.SetInitListener(this);
+            DontDestroyOnLoad(obj);
+
+            _quickSdkListener = mono;
+            quicksdk.QuickSDK.getInstance().setListener(_quickSdkListener);
         }
 
         public IEnumerator StartPlugin()
         {
             if (IsRunning)
                 yield break;
-
-            _initFailed = false;
-            
-            QuickSdkApi.SetQuickSdkListener(_quickSdkListener);
-
-            if (_initOnLaunch)
-            {
-                InitSdk(delegate(bool success)
-                {
-                    if (success)
-                    {
-                        IsRunning = true;
-                        _initFailed = false;
-                    }
-                    else
-                    {
-                        StartCoroutine(OnPluginInitError());
-                    }
-                });
-                
-                yield return new WaitUntil(() => IsRunning || _initFailed);
-                Debug.Log("QuickSdk init result:::: " + IsRunning);
-            }
-            else
-            {
-                IsRunning = true;
-            }
+            IsRunning = true;
         }
 
         public void DisposePlugin(bool isAppQuit = false)
         {
         }
-
-        private void InitSdk(Action<bool> callback)
+        
+        public void OnPrivacyAuthorization()
         {
-            if (_inited)
-            {
-                callback?.Invoke(true);
-                return;
-            }
-            
-            QuickSdkApi.InitSdk(_productCode, _productKey, delegate
-            {
-                OnSdkInitSuccess();
-                callback?.Invoke(true);
-
-            }, delegate(int code, string message)
-            {
-                Logger.Error($"Failed init QuickSDK:: code: {code}, message:{message}");
-                callback?.Invoke(false);
-            });
-            
+            quicksdk.QuickSDK.getInstance().init();
         }
 
         private void OnSdkInitSuccess()
         {
             _inited = true;
 
-            if (_unreportedEvents != null)
+            // if (_unreportedEvents != null)
+            // {
+            //     foreach (var data in _unreportedEvents)
+            //     {
+            //         QuickSdkApi.UploadEvent(data.eventName, data.eventData);
+            //     }
+            // }
+        }
+
+        public void OnSdkInitFailure()
+        {
+            StartCoroutine(OnPluginInitError());
+        }
+
+        public void OnLoginSuccess(UserInfo userInfo)
+        {
+            _userLoginData = JsonUtility.ToJson(userInfo);
+            Logger.Debug($"OnLoginSuccess ::: uid = {userInfo.uid}, data = {_userLoginData} ");
+            if (_loginCallback != null)
             {
-                foreach (var data in _unreportedEvents)
+                _loginCallback.Invoke(new Result()
                 {
-                    QuickSdkApi.UploadEvent(data.eventName, data.eventData);
-                }
+                    PluginName = Name,
+                    Success = true,
+                    Code = PluginConstants.SuccessCode,
+                    Data = _userLoginData
+                });
             }
         }
-        
+
+        public void OnSwitchAccountSuccess(UserInfo userInfo)
+        {
+            _userLoginData = JsonUtility.ToJson(userInfo);
+            if (_loginCallback != null)
+            {
+                _loginCallback.Invoke(new Result()
+                {
+                    PluginName = Name,
+                    Success = true,
+                    Code = PluginConstants.SuccessCode,
+                    Data = _userLoginData
+                });
+            }
+        }
+
+        public void OnLoginFailure(string errMsg)
+        {
+            if (_loginCallback != null)
+            {
+                _loginCallback.Invoke(new Result()
+                {
+                    PluginName = Name,
+                    Success = false,
+                    Code = PluginConstants.FailDefaultCode,
+                    Error = errMsg
+                });
+            }
+        }
+
+        public void OnLogoutSuccess()
+        {
+            if (_logoutCallback != null)
+            {
+                _logoutCallback.Invoke(new Result()
+                {
+                    PluginName = Name,
+                    Success = true,
+                    Code = PluginConstants.SuccessCode,
+                });
+            }
+        }
+
+        public void OnPaySuccess(PayResult payResult)
+        {
+            if (_paymentCallback != null)
+            {
+                _paymentCallback.Invoke(new Result()
+                {
+                    PluginName = Name,
+                    Success = true,
+                    Code = PluginConstants.SuccessCode,
+                    Data = JsonUtility.ToJson(payResult),
+                });
+            }
+        }
+
+        public void OnPayFailure(PayResult payResult)
+        {
+            if (_paymentCallback != null)
+            {
+                _paymentCallback.Invoke(new Result()
+                {
+                    PluginName = Name,
+                    Success = false,
+                    Code = PluginConstants.FailDefaultCode,
+                    Data = JsonUtility.ToJson(payResult),
+                    Error = "SDK Error"
+                });
+            }
+        }
+
+        public void OnPayCancel(PayResult payResult)
+        {
+            if (_paymentCallback != null)
+            {
+                _paymentCallback.Invoke(new  Result()
+                {
+                    PluginName = Name,
+                    Success = false,
+                    Code = PluginConstants.CancelCode,
+                    Data = JsonUtility.ToJson(payResult),
+                    Error = "User cancel"
+                });
+            }
+        }
+
         /// <summary>
         /// 
         /// </summary>
@@ -157,42 +227,8 @@ namespace PluginSet.QuickSDK
         /// </param>
         public void Login(Action<Result> callback = null, string _ = null)
         {
-            InitSdk(delegate(bool success)
-            {
-                if (success)
-                {
-                    QuickSdkApi.Login(delegate(string userInfo)
-                    {
-                        _userLoginData = userInfo;
-                        callback?.Invoke(new Result
-                        {
-                            PluginName = Name,
-                            Success = true,
-                            Code = PluginConstants.SuccessCode,
-                            Data = userInfo
-                        });
-                    }, delegate(int code, string message)
-                    {
-                        callback?.Invoke(new Result
-                        {
-                            PluginName = Name,
-                            Success = false,
-                            Code = code,
-                            Error = message
-                        });
-                    });
-                }
-                else
-                {
-                    callback?.Invoke(new Result
-                    {
-                        PluginName = Name,
-                        Success = false,
-                        Code = PluginConstants.FailDefaultCode,
-                        Error = "Init fail"
-                    });
-                }
-            });
+            _loginCallback = callback;
+            quicksdk.QuickSDK.getInstance().login();
         }
 
         public void Logout(Action<Result> callback = null, string _ = null)
@@ -208,27 +244,8 @@ namespace PluginSet.QuickSDK
                 return;
             }
             
-            QuickSdkApi.Logout(delegate
-            {
-                _userLoginData = null;
-                callback?.Invoke(new Result
-                {
-                    PluginName = Name,
-                    Success = true,
-                    Code = PluginConstants.SuccessCode,
-                });
-                
-                SendNotification(PluginConstants.NOTIFY_LOGIN_STATUS_CHANGED);
-            }, delegate(int code, string message)
-            {
-                callback?.Invoke(new Result
-                {
-                    PluginName = Name,
-                    Success = false,
-                    Code = code,
-                    Error = message
-                });
-            });
+            _logoutCallback = callback;
+            quicksdk.QuickSDK.getInstance().logout();
         }
 
         public string GetUserLoginData()
@@ -256,41 +273,10 @@ namespace PluginSet.QuickSDK
         /// </param>
         public void Pay(string productId, Action<Result> callback = null, string jsonData = null)
         {
-            InitSdk(delegate(bool success)
-            {
-                if (success)
-                {
-                    QuickSdkApi.Pay(jsonData, delegate(string result)
-                    {
-                        callback?.Invoke(new Result
-                        {
-                            PluginName = Name,
-                            Success = true,
-                            Code = PluginConstants.SuccessCode,
-                            Data = result
-                        });
-                    }, delegate(int code, string message)
-                    {
-                        callback?.Invoke(new Result
-                        {
-                            PluginName = Name,
-                            Success = false,
-                            Code = code,
-                            Error = message
-                        });
-                    });
-                }
-                else
-                {
-                    callback?.Invoke(new Result
-                    {
-                        PluginName = Name,
-                        Success = false,
-                        Code = PluginConstants.FailDefaultCode,
-                        Error = "Init fail"
-                    });
-                }
-            });
+            _paymentCallback = callback;
+            OrderInfo orderInfo = JsonUtility.FromJson<OrderInfo>(jsonData);
+            Logger.Debug($"pay start with order: {orderInfo.cpOrderID}");
+            quicksdk.QuickSDK.getInstance().pay(orderInfo, _gameRoleInfo);
         }
 
         public void SetUserInfo(bool isNewUser, string userId, Dictionary<string, object> pairs = null)
@@ -302,12 +288,21 @@ namespace PluginSet.QuickSDK
                 return;
 
             var jsonData = Json.Serialize(pairs);
-            Logger.Debug("SetUserInfo::: " + jsonData);
-            QuickSdkApi.SetGameRoleInfo(isNewUser, jsonData);
+            _gameRoleInfo = JsonUtility.FromJson<GameRoleInfo>(jsonData);
+            if (isNewUser)
+            {
+                quicksdk.QuickSDK.getInstance().createRole(_gameRoleInfo);
+            }
+            else
+            {
+                quicksdk.QuickSDK.getInstance().updateRole(_gameRoleInfo);
+            }
+            Logger.Debug($"SetUserInfo::: json: {jsonData}, roleId:{_gameRoleInfo.gameRoleID} ");
         }
 
         public void ClearUserInfo()
         {
+            _gameRoleInfo = new GameRoleInfo();
         }
 
         public void FlushUserInfo()
@@ -316,70 +311,70 @@ namespace PluginSet.QuickSDK
 
         public void ExitApplication()
         {
-            QuickSdkApi.Exit();
+            quicksdk.QuickSDK.getInstance().exit();
         }
 
-        public void VerifyRealName(Action<Result> callback = null)
-        {
-            if (!IsLoggedIn)
-            {
-                callback?.Invoke(new Result
-                {
-                    PluginName = Name,
-                    Code = PluginConstants.FailDefaultCode,
-                    Success = false,
-                    Error = "No login"
-                });
-                return;
-            }
-            
-            QuickSdkApi.VerifyRealName(delegate(string result)
-            {
-                Logger.Debug("QuickSdk VerifyRealName success " + result);
-                callback?.Invoke(new Result
-                {
-                    PluginName = Name,
-                    Code = PluginConstants.SuccessCode,
-                    Success = true,
-                    Data = result
-                });
-            }, delegate(int code, string message)
-            {
-                Logger.Debug("QuickSdk VerifyRealName fail " + message);
-                callback?.Invoke(new Result
-                {
-                    PluginName = Name,
-                    Code = code,
-                    Success = false,
-                    Error = message
-                });
-            });
-        }
+        // public void VerifyRealName(Action<Result> callback = null)
+        // {
+        //     if (!IsLoggedIn)
+        //     {
+        //         callback?.Invoke(new Result
+        //         {
+        //             PluginName = Name,
+        //             Code = PluginConstants.FailDefaultCode,
+        //             Success = false,
+        //             Error = "No login"
+        //         });
+        //         return;
+        //     }
+        //     
+        //     QuickSdkApi.VerifyRealName(delegate(string result)
+        //     {
+        //         Logger.Debug("QuickSdk VerifyRealName success " + result);
+        //         callback?.Invoke(new Result
+        //         {
+        //             PluginName = Name,
+        //             Code = PluginConstants.SuccessCode,
+        //             Success = true,
+        //             Data = result
+        //         });
+        //     }, delegate(int code, string message)
+        //     {
+        //         Logger.Debug("QuickSdk VerifyRealName fail " + message);
+        //         callback?.Invoke(new Result
+        //         {
+        //             PluginName = Name,
+        //             Code = code,
+        //             Success = false,
+        //             Error = message
+        //         });
+        //     });
+        // }
         
-        public void CustomEvent(string customEventName, Dictionary<string, object> eventData = null)
-        {
-            string jsonData = "{}";
-            if (eventData != null)
-            {
-                jsonData = Json.Serialize(eventData);
-            }
-
-            Logger.Debug($"CustomEvent::: event=>{customEventName}, params=>{jsonData}");
-            if (_inited)
-            {
-                QuickSdkApi.UploadEvent(customEventName, jsonData);
-            }
-            else
-            {
-                if (_unreportedEvents == null)
-                    _unreportedEvents = new List<EventData>();
-                _unreportedEvents.Add(new EventData
-                {
-                    eventName = customEventName,
-                    eventData = jsonData,
-                });
-            }
-        }
+        // public void CustomEvent(string customEventName, Dictionary<string, object> eventData = null)
+        // {
+        //     string jsonData = "{}";
+        //     if (eventData != null)
+        //     {
+        //         jsonData = Json.Serialize(eventData);
+        //     }
+        //
+        //     Logger.Debug($"CustomEvent::: event=>{customEventName}, params=>{jsonData}");
+        //     if (_inited)
+        //     {
+        //         QuickSdkApi.UploadEvent(customEventName, jsonData);
+        //     }
+        //     else
+        //     {
+        //         if (_unreportedEvents == null)
+        //             _unreportedEvents = new List<EventData>();
+        //         _unreportedEvents.Add(new EventData
+        //         {
+        //             eventName = customEventName,
+        //             eventData = jsonData,
+        //         });
+        //     }
+        // }
 
         private void OnSwitchUserSuccess(string userInfo)
         {
@@ -407,7 +402,6 @@ namespace PluginSet.QuickSDK
 
         private IEnumerator OnPluginInitErrorConfirm()
         {
-            _initFailed = true;
             _managerInstance.Restart();
             yield break;
         }
@@ -417,7 +411,11 @@ namespace PluginSet.QuickSDK
             Application.Quit(1);
             yield break;
         }
-        
+
+        void IQuickSDKListener.OnSdkInitSuccess()
+        {
+            OnSdkInitSuccess();
+        }
     }
 }
 #endif
