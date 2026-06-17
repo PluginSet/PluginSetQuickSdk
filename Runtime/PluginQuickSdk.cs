@@ -54,7 +54,7 @@ namespace PluginSet.QuickSDK
         
         private Action<Result> _loginCallback;
         private Action<Result> _logoutCallback;
-        private Action<Result> _paymentCallback;
+        private Action<PurchaseResult> _paymentCallback;
 
         private QuickSDKListener _quickSdkListener;
         private GameRoleInfo _gameRoleInfo;
@@ -166,7 +166,7 @@ namespace PluginSet.QuickSDK
         {
             if (_paymentCallback != null)
             {
-                _paymentCallback.Invoke(new Result()
+                _paymentCallback.Invoke(new PurchaseResult()
                 {
                     PluginName = Name,
                     Success = true,
@@ -180,7 +180,7 @@ namespace PluginSet.QuickSDK
         {
             if (_paymentCallback != null)
             {
-                _paymentCallback.Invoke(new Result()
+                _paymentCallback.Invoke(new PurchaseResult()
                 {
                     PluginName = Name,
                     Success = false,
@@ -195,7 +195,7 @@ namespace PluginSet.QuickSDK
         {
             if (_paymentCallback != null)
             {
-                _paymentCallback.Invoke(new  Result()
+                _paymentCallback.Invoke(new PurchaseResult()
                 {
                     PluginName = Name,
                     Success = false,
@@ -271,7 +271,7 @@ namespace PluginSet.QuickSDK
         /// extrasParams string 扩展传参
         /// externalParams string 扩展传参
         /// </param>
-        public void Pay(string productId, Action<Result> callback = null, string jsonData = null)
+        public void Pay(string productId, Action<PurchaseResult> callback = null, string jsonData = null)
         {
             _paymentCallback = callback;
             OrderInfo orderInfo = JsonUtility.FromJson<OrderInfo>(jsonData);

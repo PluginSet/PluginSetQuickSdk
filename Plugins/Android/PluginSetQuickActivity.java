@@ -10,8 +10,6 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 
 import com.qk.game.MainActivity;
-import com.unity3d.player.UnityPlayerActivity;
-
 public class PluginSetQuickActivity extends MainActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
